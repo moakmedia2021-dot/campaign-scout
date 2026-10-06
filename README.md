@@ -4,7 +4,8 @@ Watches your Discord 24/7 and sorts every campaign onto your **UGC Kickstarter C
 
 Each card shows:
 - the campaign
-- the CPM and/or retainer
+- the base pay, CPM, posts per day, and any retainer
+- why it got its rating
 - the pay details
 - the platforms
 - the campaign managers
@@ -12,7 +13,7 @@ Each card shows:
 - a link back to the original Discord post
 
 ```
-Campaign servers ──(Follow)──▶ #campaign-feed in your server ──▶ bot ──▶ Claude reads it ──▶ your cutoffs ──▶ Miro card
+Campaign servers ──(Follow)──▶ #campaign-feed in your server ──▶ bot ──▶ Claude reads it ──▶ your rules ──▶ Miro card
 ```
 
 Setup takes about 20 minutes, once.
@@ -71,7 +72,7 @@ The bot uses Claude Haiku, so each post costs a fraction of a cent.
    - Click **New Project**, choose **Deploy from GitHub repo**, and pick `campaign-scout`.
 3. Add your settings:
    - Open the service, go to **Variables**, and click **Raw Editor**.
-   - Paste the contents of `.env.example` with your values filled in, then click **Update**.
+   - Paste the contents of `.env.example` with your three keys filled in, then click **Update**. Your rating rules are already in there.
    - Railway redeploys on its own.
 4. Open **Deployments**, then **View Logs**. You should see:
    ```
@@ -86,24 +87,37 @@ The three frames appear on your board to the right of everything that's already 
 
 ---
 
+## How campaigns get rated
+
+Every campaign gets a **pay** tier and a **posting** tier:
+
+| | Pay | Posting |
+|---|---|---|
+| 🟢 **Great** | $50+ base per post **and** a CPM | 4+ posts/day |
+| 🟡 **Good** | $30+ base (CPM optional), or a $7+ CPM | 2–3 posts/day |
+| 🔴 **Bad** | Anything less | 1 post/day |
+
+The card lands in the **lower** of the two. For example, $60 base + $5 CPM with only 2 posts/day is **Good**. If posting frequency isn't listed, pay decides on its own. Retainers show on the card but don't affect the rating.
+
+Each card spells out why, like *Pay: Great · Posting: Good*.
+
 ## Settings
 
-| Variable | What it does |
-|---|---|
-| `GREAT_CPM` / `GOOD_CPM` | $ per 1,000 views needed for Great / Good. Anything below Good is Bad. |
-| `GREAT_RETAINER` / `GOOD_RETAINER` | $ per month needed for Great / Good. |
-| `NO_PAY_TIER` | Where campaigns with no $ listed go (default `Bad`). |
-| `WATCH_CHANNEL_IDS` | Only watch these channels. Blank means every channel in your feed server. |
-| `BACKFILL_HOURS` | On restart, catch up on this many hours of posts (default 24). |
+| Variable | What it does | Default |
+|---|---|---|
+| `GREAT_BASE` / `GOOD_BASE` | $ base per post for Great / Good pay | 50 / 30 |
+| `GOOD_CPM` | A CPM this high makes a low-base campaign Good pay | 7 |
+| `GREAT_POSTS_PER_DAY` / `GOOD_POSTS_PER_DAY` | Posts per day for Great / Good posting | 4 / 2 |
+| `NO_PAY_TIER` | Where campaigns with no base and no CPM go | Bad |
+| `WATCH_CHANNEL_IDS` | Only watch these channels. Blank means every channel in your feed server. | blank |
+| `BACKFILL_HOURS` | On restart, catch up on this many hours of posts | 24 |
 
-A campaign lands in the **best** tier either its CPM or its retainer earns. For example, a $0.50 CPM with a $2,000/mo retainer can still be Great.
-
-Change any cutoff in Railway's **Variables** whenever you want, and it applies to new campaigns.
+Change any of these in Railway's **Variables** whenever you want. It applies to new campaigns.
 
 ## Good to know
 
 - **Duplicates are skipped.** The same post, or the same campaign name posted again, won't make a second card.
-- **Text only.** If a campaign is posted only as an image with no text, the bot can't read the numbers. Forward it with a quick note like "Brand X, $1.50 CPM, DM @manager".
+- **Text only.** If a campaign is posted only as an image with no text, the bot can't read the numbers. Forward it with a quick note like "Brand X, $40 base + $3 CPM, 3 posts/day, DM @manager".
 - **You can still edit the board.** Drag cards or add notes freely. New cards slot into the next open spot in their column, and full columns grow taller on their own.
 - **Run it on your own computer instead:**
   1. Run `pip install -r requirements.txt`.

@@ -78,9 +78,11 @@ Record a campaign only when the post offers creators paid work: UGC videos, clip
 
 Field rules:
 - Never invent anything. If a detail isn't stated, use null (numbers) or an empty string/list.
-- cpm_usd: US dollars paid per 1,000 views. Convert other forms: "$1 per 1K" = 1, "$0.002 per view" = 2, "$1.50/1k" = 1.5. If a range, use the base (lowest) rate. If the currency isn't USD and you can't convert confidently, use null and explain in pay_details.
-- retainer_usd_monthly: fixed recurring pay converted to a month (weekly x 4). A one-time or per-video flat fee is NOT a retainer; put it in pay_details instead.
-- pay_details: one short line with the full pay picture in plain words (rate, caps, minimums, bonuses, per-video fees).
+- base_pay_usd: guaranteed flat pay per post or per video in US dollars, e.g. "$50 base + CPM", "$40 per video", "flat $30/post". If a range, use the lowest. A monthly or weekly payment is NOT base pay; that's a retainer.
+- cpm_usd: US dollars paid per 1,000 views. Convert other forms: "$1 per 1K" = 1, "$0.002 per view" = 2, "$1.50/1k" = 1.5. If a range, use the lowest rate. If the currency isn't USD and you can't convert confidently, use null and explain in pay_details.
+- posts_per_day: how many posts per day the campaign allows or asks for. Convert other periods ("14 per week" = 2). If a range like "4-5 daily", use the highest number.
+- retainer_usd_monthly: fixed recurring pay converted to a month (weekly x 4).
+- pay_details: one short line with the full pay picture in plain words (base, CPM, caps, minimums, bonuses).
 - campaign_managers: names or @handles of the people running the campaign or the person to contact.
 - where_to_find: concrete steps to join or apply: which channel, link, form, or who to DM.
 - links: any join, application, brief, or content-guideline URLs in the post.
@@ -100,15 +102,17 @@ CAMPAIGN_TOOL = {
                         "brand": {"type": "string", "description": "Brand, app, artist, or creator paying for the content"},
                         "campaign_name": {"type": "string"},
                         "campaign_managers": {"type": "array", "items": {"type": "string"}},
+                        "base_pay_usd": {"type": ["number", "null"], "description": "Flat pay per post/video"},
                         "cpm_usd": {"type": ["number", "null"]},
+                        "posts_per_day": {"type": ["number", "null"]},
                         "retainer_usd_monthly": {"type": ["number", "null"]},
                         "pay_details": {"type": "string"},
                         "platforms": {"type": "string", "description": "TikTok, IG Reels, YouTube Shorts, etc."},
                         "where_to_find": {"type": "string"},
                         "links": {"type": "array", "items": {"type": "string"}},
                     },
-                    "required": ["brand", "campaign_name", "campaign_managers", "cpm_usd",
-                                 "retainer_usd_monthly", "pay_details", "where_to_find", "links"],
+                    "required": ["brand", "campaign_name", "campaign_managers", "base_pay_usd", "cpm_usd",
+                                 "posts_per_day", "retainer_usd_monthly", "pay_details", "where_to_find", "links"],
                 },
             }
         },
@@ -122,7 +126,9 @@ class Campaign:
     brand: str = ""
     campaign_name: str = ""
     campaign_managers: list[str] = field(default_factory=list)
+    base_pay_usd: float | None = None
     cpm_usd: float | None = None
+    posts_per_day: float | None = None
     retainer_usd_monthly: float | None = None
     pay_details: str = ""
     platforms: str = ""
@@ -146,7 +152,9 @@ class Campaign:
             brand=str(d.get("brand") or "").strip(),
             campaign_name=str(d.get("campaign_name") or "").strip(),
             campaign_managers=strlist(d.get("campaign_managers")),
+            base_pay_usd=num(d.get("base_pay_usd")),
             cpm_usd=num(d.get("cpm_usd")),
+            posts_per_day=num(d.get("posts_per_day")),
             retainer_usd_monthly=num(d.get("retainer_usd_monthly")),
             pay_details=str(d.get("pay_details") or "").strip(),
             platforms=str(d.get("platforms") or "").strip(),
@@ -192,32 +200,48 @@ class Extractor:
 
 @dataclass
 class Cutoffs:
-    good_cpm: float
-    great_cpm: float
-    good_retainer: float
-    great_retainer: float
-    no_pay_tier: str = "Bad"
+    great_base: float = 50      # $ base per post needed for Great (a CPM must be listed too)
+    good_base: float = 30       # $ base per post needed for Good (CPM optional)
+    good_cpm: float = 7         # a CPM this high makes a low/no-base campaign Good
+    great_posts: float = 4      # posts per day for Great
+    good_posts: float = 2       # posts per day for Good
+    no_pay_tier: str = "Bad"    # where campaigns with no base and no CPM go
 
 
-def _tier_for(value, good, great):
-    if value is None:
+def pay_tier(c: Campaign, cut: Cutoffs) -> str | None:
+    base, cpm = c.base_pay_usd, c.cpm_usd
+    if base is None and cpm is None:
         return None
-    if value >= great:
+    base = base or 0
+    if base >= cut.great_base and cpm:
         return "Great"
-    if value >= good:
+    if base >= cut.good_base:
+        return "Good"
+    if cpm is not None and cpm >= cut.good_cpm:
         return "Good"
     return "Bad"
 
 
-def rate(c: Campaign, cut: Cutoffs) -> str:
-    """Best tier earned by either the CPM or the retainer; no pay listed -> no_pay_tier."""
-    tiers = [t for t in (
-        _tier_for(c.cpm_usd, cut.good_cpm, cut.great_cpm),
-        _tier_for(c.retainer_usd_monthly, cut.good_retainer, cut.great_retainer),
-    ) if t]
-    if not tiers:
-        return cut.no_pay_tier
-    return max(tiers, key=TIERS.index)
+def posting_tier(c: Campaign, cut: Cutoffs) -> str | None:
+    p = c.posts_per_day
+    if p is None:
+        return None
+    if p >= cut.great_posts:
+        return "Great"
+    if p >= cut.good_posts:
+        return "Good"
+    return "Bad"
+
+
+def rate(c: Campaign, cut: Cutoffs) -> tuple[str, str]:
+    """Tier = the lower of the pay tier and the posting tier. Returns (tier, short reason)."""
+    pay = pay_tier(c, cut)
+    posting = posting_tier(c, cut)
+    pay_used = pay or cut.no_pay_tier
+    tiers = [pay_used] + ([posting] if posting else [])
+    tier = min(tiers, key=TIERS.index)
+    reason = f"Pay: {pay or 'no $ listed'} · Posting: {posting or 'not listed'}"
+    return tier, reason
 
 
 # --------------------------------------------------------------------------- #
@@ -228,13 +252,22 @@ def _money(v: float) -> str:
     return f"${v:,.2f}" if v % 1 else f"${v:,.0f}"
 
 
+def _num(v: float) -> str:
+    return f"{v:g}"
+
+
 def pay_line(c: Campaign) -> str:
-    bits = []
+    pay = []
+    if c.base_pay_usd is not None:
+        pay.append(f"{_money(c.base_pay_usd)} base")
     if c.cpm_usd is not None:
-        bits.append(f"{_money(c.cpm_usd)} CPM")
+        pay.append(f"{_money(c.cpm_usd)} CPM")
+    bits = [" + ".join(pay)] if pay else ["No $ listed"]
+    if c.posts_per_day is not None:
+        bits.append(f"{_num(c.posts_per_day)} post{'s' if c.posts_per_day != 1 else ''}/day")
     if c.retainer_usd_monthly is not None:
         bits.append(f"{_money(c.retainer_usd_monthly)}/mo retainer")
-    return " · ".join(bits) or "No $ listed"
+    return " · ".join(bits)
 
 
 def _clip(s: str, n: int = 220) -> str:
@@ -242,9 +275,12 @@ def _clip(s: str, n: int = 220) -> str:
     return s if len(s) <= n else s[: n - 1] + "…"
 
 
-def card_description(c: Campaign, tier: str, source: Source, message_id: int, found: str) -> str:
+def card_description(c: Campaign, tier: str, reason: str, source: Source, message_id: int, found: str) -> str:
     e = html.escape
-    lines = [f"<p><strong>{e(tier.upper())} · {e(pay_line(c))}</strong></p>"]
+    lines = [
+        f"<p><strong>{e(tier.upper())} · {e(pay_line(c))}</strong></p>",
+        f"<p><em>{e(reason)}</em></p>",
+    ]
     if c.pay_details:
         lines.append(f"<p>{e(_clip(c.pay_details))}</p>")
     if c.platforms:

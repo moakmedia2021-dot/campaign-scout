@@ -37,26 +37,30 @@ def _need(name: str) -> str:
     return v
 
 
-def _need_number(name: str) -> float:
-    raw = _need(name).replace("$", "").replace(",", "")
+def _number(name: str, default: float) -> float:
+    raw = os.getenv(name, "").strip().replace("$", "").replace(",", "")
+    if not raw:
+        return default
     try:
         return float(raw)
     except ValueError:
-        sys.exit(f"{name} should be a number like 1.5, got {raw!r}")
+        sys.exit(f"{name} should be a number like 30, got {raw!r}")
 
 
 def load_settings() -> dict:
     no_pay = os.getenv("NO_PAY_TIER", "Bad").strip().title()
     if no_pay not in ("Bad", "Good", "Great"):
         sys.exit("NO_PAY_TIER must be Bad, Good, or Great")
+    d = Cutoffs()
     cut = Cutoffs(
-        good_cpm=_need_number("GOOD_CPM"),
-        great_cpm=_need_number("GREAT_CPM"),
-        good_retainer=_need_number("GOOD_RETAINER"),
-        great_retainer=_need_number("GREAT_RETAINER"),
+        great_base=_number("GREAT_BASE", d.great_base),
+        good_base=_number("GOOD_BASE", d.good_base),
+        good_cpm=_number("GOOD_CPM", d.good_cpm),
+        great_posts=_number("GREAT_POSTS_PER_DAY", d.great_posts),
+        good_posts=_number("GOOD_POSTS_PER_DAY", d.good_posts),
         no_pay_tier=no_pay,
     )
-    if cut.great_cpm < cut.good_cpm or cut.great_retainer < cut.good_retainer:
+    if cut.great_base < cut.good_base or cut.great_posts < cut.good_posts:
         sys.exit("GREAT cutoffs must be at least as high as GOOD cutoffs")
     ids = {int(x) for x in os.getenv("WATCH_CHANNEL_IDS", "").replace(" ", "").split(",") if x.isdigit()}
     return {
@@ -152,12 +156,12 @@ class Scout(discord.Client):
 
         found = message.created_at.astimezone(timezone.utc).strftime("%b %d, %Y")
         for c in campaigns:
-            tier = rate(c, self.cfg["cutoffs"])
+            tier, reason = rate(c, self.cfg["cutoffs"])
             async with self.board_lock:
                 if self.board.already_has(title=c.title):
                     log.info("Skipping duplicate: %s", c.title)
                     continue
-                desc = card_description(c, tier, source, message.id, found)
+                desc = card_description(c, tier, reason, source, message.id, found)
                 try:
                     await asyncio.to_thread(self.board.add_card, tier, c.title, desc, message.id)
                     log.info("Added [%s] %s (%s)", tier, c.title, source.label)

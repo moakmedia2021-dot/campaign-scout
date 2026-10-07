@@ -106,7 +106,6 @@ class Scout(discord.Client):
             return
         self.ready_once = True
         log.info("Logged in as %s", self.user)
-        await asyncio.to_thread(self.board.setup)
         channels = list(self.watched_channels())
         log.info("Watching %d channel(s): %s", len(channels), ", ".join(f"#{c.name}" for c in channels) or "none")
         if not channels:
@@ -171,7 +170,15 @@ class Scout(discord.Client):
 
 def main():
     cfg = load_settings()
-    Scout(cfg).run(cfg["discord_token"], log_handler=None)
+    scout = Scout(cfg)
+    # Connect to Miro first, so a bad token stops here with a clear message
+    # instead of the bot sitting in Discord unable to save anything.
+    try:
+        scout.board.setup()
+    except Exception as e:
+        log.error("Couldn't set up the Miro board: %s", e)
+        sys.exit(1)
+    scout.run(cfg["discord_token"], log_handler=None)
 
 
 if __name__ == "__main__":

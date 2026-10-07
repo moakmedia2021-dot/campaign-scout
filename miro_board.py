@@ -38,7 +38,11 @@ class MiroError(RuntimeError):
 
 class MiroBoard:
     def __init__(self, token: str, board_id: str, session: requests.Session | None = None):
-        self.board_id = board_id
+        self.board_id = board_id.strip()
+        # Forgive common paste mistakes: quotes around it, or "Bearer " in front.
+        token = token.strip().strip("'\"").strip()
+        if token.lower().startswith("bearer "):
+            token = token[7:].strip()
         self.s = session or requests.Session()
         self.s.headers.update({
             "Authorization": f"Bearer {token}",
@@ -60,6 +64,14 @@ class MiroBoard:
                 log.warning("Miro %s on %s %s, retrying in %.0fs", r.status_code, method, path, wait)
                 time.sleep(wait)
                 continue
+            if r.status_code == 401:
+                raise MiroError(
+                    "Miro rejected MIRO_TOKEN. Use the access token from the popup after "
+                    "'Install app and get OAuth token' (not the Client ID or Client secret).")
+            if r.status_code in (403, 404) and path == "/items":
+                raise MiroError(
+                    f"Miro can't open board {self.board_id} ({r.status_code}). Check MIRO_BOARD_ID, and that "
+                    "the Miro app is installed on the team that owns this board.")
             if r.status_code >= 400:
                 raise MiroError(f"{method} {path} -> {r.status_code}: {r.text[:400]}")
             return r.json() if r.content else {}

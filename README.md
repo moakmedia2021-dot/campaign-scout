@@ -1,10 +1,11 @@
 # Campaign Scout
 
-Watches your Discord 24/7 and sorts every campaign onto your **UGC Kickstarter Client Roadmap** Miro board into three columns: **🟢 GREAT**, **🟡 GOOD**, **🔴 BAD**.
+Watches your Discord 24/7 and drops every campaign into the **CAMPAIGN BANK** on your **My First Board** Miro board, under **GREAT**, **GOOD** or **BAD**.
 
-Each card shows:
-- the campaign
-- the base pay, CPM, posts per day, and any retainer
+The card face shows the campaign and its pay at a glance, for example:
+`Lumi — App Clips | $40 base + $1.50 CPM · 3 posts/day`
+
+Open a card to see:
 - why it got its rating
 - the pay details
 - the platforms
@@ -48,12 +49,12 @@ From then on, every new post there gets copied into your feed automatically.
 ## 4. Miro token (3 min)
 
 1. In Miro, click your profile picture and choose **Settings**, then open **Your apps** and click **Create new app**. Name it `Campaign Scout`.
-2. Pick the **team your UGC Kickstarter board is in**.
+2. Pick the **team that owns My First Board**.
 3. Under **Permissions**, tick `boards:read` and `boards:write`.
 4. Click **Install app and get OAuth token**, then pick the same team.
 5. Copy the token. This is your `MIRO_TOKEN`.
 
-The board ID is already filled in for you: `uXjVHhVoW2M=`.
+The board ID for My First Board is already filled in for you: `uXjVHhQ8EOg=`.
 
 ## 5. Claude API key (2 min)
 
@@ -74,16 +75,21 @@ The bot uses Claude Haiku, so each post costs a fraction of a cent.
    - Open the service, go to **Variables**, and click **Raw Editor**.
    - Paste the contents of `.env.example` with your three keys filled in, then click **Update**. Your rating rules are already in there.
    - Railway redeploys on its own.
-4. Open **Deployments**, then **View Logs**. You should see:
+4. Open **Deployments**, then **Deploy Logs**. You should see:
    ```
+   Found your Campaign Bank: 0 cards in it (Great 0, Good 0, Bad 0), 0 archived
    Logged in as Campaign Scout#1234
-   Created frame 🟢 GREAT Campaigns   (first run only)
-   Miro board ready: ...
    Watching 1 channel(s): #campaign-feed
    ```
 5. Railway's trial runs out, so switch to the **Hobby** plan to keep it on 24/7.
 
-The three frames appear on your board to the right of everything that's already there.
+## How the Campaign Bank fills up
+
+- **Finding it.** The bot looks for a box (shape) with **GREAT**, **GOOD** and **BAD** headings inside it. That's your Campaign Bank. Keep those three words as their own text, and keep them inside the box.
+- **Order.** Each column is sorted **newest at the top**, four cards per row.
+- **When a column is full.** Its oldest cards move to **Archive** frames to the right of everything else on the board, so nothing is ever deleted. The Archive is created the first time it's needed.
+- **Moving cards by hand works.** Drag a card into a different column and the bot treats it as part of that column. Drag it out of the box entirely (for example into IN PROGRESS) and the bot leaves it alone.
+- **No Campaign Bank on the board?** The bot makes its own 🟢 GREAT / 🟡 GOOD / 🔴 BAD frames to the right of your content instead.
 
 ---
 
@@ -118,7 +124,6 @@ Change any of these in Railway's **Variables** whenever you want. It applies to 
 
 - **Duplicates are skipped.** The same post, or the same campaign name posted again, won't make a second card.
 - **Text only.** If a campaign is posted only as an image with no text, the bot can't read the numbers. Forward it with a quick note like "Brand X, $40 base + $3 CPM, 3 posts/day, DM @manager".
-- **You can still edit the board.** Drag cards or add notes freely. New cards slot into the next open spot in their column, and full columns grow taller on their own.
 - **Run it on your own computer instead:**
   1. Run `pip install -r requirements.txt`.
   2. Copy `.env.example` to `.env` and fill it in.

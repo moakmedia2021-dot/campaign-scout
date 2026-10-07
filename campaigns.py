@@ -270,6 +270,11 @@ def pay_line(c: Campaign) -> str:
     return " · ".join(bits)
 
 
+def card_title(c: Campaign) -> str:
+    """What shows on the card face: campaign name, then the pay at a glance."""
+    return f"{c.title.replace(' | ', ' / ')} | {pay_line(c)}"
+
+
 def _clip(s: str, n: int = 220) -> str:
     s = re.sub(r"\s+", " ", s or "").strip()
     return s if len(s) <= n else s[: n - 1] + "…"

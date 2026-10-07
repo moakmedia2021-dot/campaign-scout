@@ -13,7 +13,7 @@ from datetime import datetime, timedelta, timezone
 import anthropic
 import discord
 
-from campaigns import Cutoffs, Extractor, card_description, describe_source, message_to_text, rate
+from campaigns import Cutoffs, Extractor, card_description, card_title, describe_source, message_to_text, rate
 from miro_board import MiroBoard
 
 try:  # lets you run it on your own computer with a .env file
@@ -157,12 +157,12 @@ class Scout(discord.Client):
         for c in campaigns:
             tier, reason = rate(c, self.cfg["cutoffs"])
             async with self.board_lock:
-                if self.board.already_has(title=c.title):
+                if self.board.already_has(title=card_title(c)):
                     log.info("Skipping duplicate: %s", c.title)
                     continue
                 desc = card_description(c, tier, reason, source, message.id, found)
                 try:
-                    await asyncio.to_thread(self.board.add_card, tier, c.title, desc, message.id)
+                    await asyncio.to_thread(self.board.add_card, tier, card_title(c), desc, message.id)
                     log.info("Added [%s] %s (%s)", tier, c.title, source.label)
                 except Exception as e:  # keep the bot alive if Miro hiccups
                     log.error("Miro wouldn't take '%s': %s", c.title, e)
